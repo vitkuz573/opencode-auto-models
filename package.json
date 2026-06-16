@@ -1,0 +1,43 @@
+{
+  "name": "opencode-auto-models",
+  "version": "0.1.0",
+  "description": "OpenCode plugin that auto-discovers models from OpenAI-compatible providers",
+  "type": "module",
+  "main": "src/index.ts",
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "require": "./src/index.ts"
+    }
+  },
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vitkuz573/opencode-auto-models.git"
+  },
+  "author": "Vitaly Kuzyaev <vitkuz573@gmail.com>",
+  "license": "MIT",
+  "keywords": [
+    "opencode",
+    "plugin",
+    "openai",
+    "models",
+    "ai-sdk",
+    "openai-compatible"
+  ],
+  "peerDependencies": {
+    "@opencode-ai/plugin": "*"
+  },
+  "devDependencies": {
+    "@opencode-ai/plugin": "file:/usr/local/lib/opencode/node_modules/@opencode-ai/plugin",
+    "@opencode-ai/sdk": "file:/usr/local/lib/opencode/node_modules/@opencode-ai/sdk",
+    "typescript": "^5.0.0"
+  }
+}
