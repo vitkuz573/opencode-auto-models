@@ -24,21 +24,44 @@ type ModelLimits = {
 
 type ModelMap = Record<string, any>;
 
+type ModelLimitRule = {
+  pattern: RegExp;
+  limits: ModelLimits;
+};
+
+type ModelLimitRuleInput = {
+  pattern: string;
+  context: number;
+  output: number;
+};
+
 const DEFAULT_LIMITS: ModelLimits = {
   context: 128000,
   output: 16384,
 };
 
-// Provider-agnostic heuristics based on known upstream model families.
-// The first matching pattern wins.
-const MODEL_LIMIT_HEURISTICS: Array<{ pattern: RegExp; limits: ModelLimits }> = [
+// Built-in heuristics for common upstream model families.
+// External rules passed via config take precedence over these.
+const BUILT_IN_LIMIT_RULES: ModelLimitRule[] = [
   { pattern: /kimi-k2\.7/i, limits: { context: 262144, output: 32768 } },
   { pattern: /kimi-k2\.6/i, limits: { context: 262144, output: 32768 } },
   { pattern: /kimi-k2\.5/i, limits: { context: 262144, output: 32768 } },
 ];
 
-function inferModelLimits(modelId: string, defaults: ModelLimits): ModelLimits {
-  for (const rule of MODEL_LIMIT_HEURISTICS) {
+function compileLimitRules(rules?: ModelLimitRuleInput[]): ModelLimitRule[] {
+  if (!Array.isArray(rules)) return [];
+  return rules.map((rule) => ({
+    limits: { context: rule.context, output: rule.output },
+    pattern: new RegExp(rule.pattern, "i"),
+  }));
+}
+
+function inferModelLimits(
+  modelId: string,
+  rules: ModelLimitRule[],
+  defaults: ModelLimits
+): ModelLimits {
+  for (const rule of rules) {
     if (rule.pattern.test(modelId)) {
       return rule.limits;
     }
@@ -115,6 +138,12 @@ export const AutoModelsPlugin: Plugin = async ({ client }, options) => {
               : DEFAULT_LIMITS.output,
         };
 
+        const externalRules = [
+          ...compileLimitRules(opts.modelLimits as ModelLimitRuleInput[] | undefined),
+          ...compileLimitRules((options as { modelLimits?: ModelLimitRuleInput[] }).modelLimits),
+        ];
+        const limitRules = [...externalRules, ...BUILT_IN_LIMIT_RULES];
+
         if (dryRun) {
           await client.app.log({
             body: {
@@ -167,7 +196,7 @@ export const AutoModelsPlugin: Plugin = async ({ client }, options) => {
               if (!id) continue;
               discovered[id] = {
                 name: model.name || id,
-                limit: inferModelLimits(id, providerDefaultLimits),
+                limit: inferModelLimits(id, limitRules, providerDefaultLimits),
               };
             }
 

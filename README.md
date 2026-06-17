@@ -61,12 +61,12 @@ block empty:
 ```json
 {
   "provider": {
-    "neutralbeats": {
+    "my-provider": {
       "npm": "@ai-sdk/openai-compatible",
-      "name": "NeutralBeats",
+      "name": "My Provider",
       "options": {
-        "baseURL": "https://api.neutralbeats.com/v1",
-        "apiKey": "{env:NEUTRALBEATS_API_KEY}"
+        "baseURL": "https://api.example.com/v1",
+        "apiKey": "{env:MY_PROVIDER_API_KEY}"
       }
     }
   }
@@ -80,12 +80,12 @@ You can also keep manual overrides for specific models you care about:
 ```json
 {
   "provider": {
-    "neutralbeats": {
+    "my-provider": {
       "npm": "@ai-sdk/openai-compatible",
-      "name": "NeutralBeats",
+      "name": "My Provider",
       "options": {
-        "baseURL": "https://api.neutralbeats.com/v1",
-        "apiKey": "{env:NEUTRALBEATS_API_KEY}",
+        "baseURL": "https://api.example.com/v1",
+        "apiKey": "{env:MY_PROVIDER_API_KEY}",
         "autoModels": true
       },
       "models": {
@@ -120,6 +120,7 @@ Set these inside `provider.options`:
 | `apiKey` | — | API key used for the `Authorization: Bearer` header. |
 | `autoModelsContext` | `128000` | Default context limit for every auto-discovered model of this provider. |
 | `autoModelsOutput` | `16384` | Default output limit for every auto-discovered model of this provider. |
+| `modelLimits` | — | Per-provider regex-based model limits (see [Model context limits](#model-context-limits)). |
 
 ## Plugin options
 
@@ -130,7 +131,10 @@ If you load the plugin via the `plugin` array, you can pass options:
   "plugin": [
     ["git+https://github.com/vitkuz573/opencode-auto-models.git", {
       "timeout": 10000,
-      "cacheTtl": 600000
+      "cacheTtl": 600000,
+      "modelLimits": [
+        { "pattern": "kimi-k2\\.[567]", "context": 262144, "output": 32768 }
+      ]
     }]
   ]
 }
@@ -143,6 +147,7 @@ If you load the plugin via the `plugin` array, you can pass options:
 | `dryRun` | `false` | If `true`, log what would be fetched without mutating the config. |
 | `defaultContext` | `128000` | Fallback context limit for auto-discovered models when no heuristic matches. |
 | `defaultOutput` | `16384` | Fallback output limit for auto-discovered models when no heuristic matches. |
+| `modelLimits` | — | Global regex-based model limits (see [Model context limits](#model-context-limits)). |
 
 ## How it works
 
@@ -162,25 +167,41 @@ If the request fails, the provider is left unchanged and the error is logged via
 ## Model context limits
 
 Most OpenAI-compatible `/models` endpoints do not return context or output
-limits, so the plugin applies defaults and a small provider-agnostic heuristic
-table for well-known model families:
+limits, so the plugin applies defaults and lets you define your own limits via
+config. You can pass regex-based `modelLimits` either globally in the plugin
+options or per-provider in `provider.options`:
 
-| Model family | Context | Output |
-|--------------|---------|--------|
-| `kimi-k2.7*` | 262,144 | 32,768 |
-| `kimi-k2.6*` | 262,144 | 32,768 |
-| `kimi-k2.5*` | 262,144 | 32,768 |
+```json
+{
+  "provider": {
+    "my-provider": {
+      "options": {
+        "modelLimits": [
+          { "pattern": "kimi-k2\\.[567]", "context": 262144, "output": 32768 }
+        ]
+      }
+    }
+  }
+}
+```
+
+The plugin also ships with a small provider-agnostic heuristic table for common
+upstream model families (e.g. `kimi-k2.7*`, `kimi-k2.6*`, `kimi-k2.5*` → 256K
+context).
 
 The priority order is:
 
 1. Manual `limit` in `provider.models` (highest priority).
-2. Provider-level `autoModelsContext` / `autoModelsOutput`.
-3. Built-in heuristic for the model ID.
-4. Plugin-level `defaultContext` / `defaultOutput`.
-5. Hardcoded fallback of `128000` / `16384`.
+2. Provider-level `modelLimits`.
+3. Provider-level `autoModelsContext` / `autoModelsOutput`.
+4. Plugin-level `modelLimits`.
+5. Built-in heuristic for the model ID.
+6. Plugin-level `defaultContext` / `defaultOutput`.
+7. Hardcoded fallback of `128000` / `16384`.
 
-This means `kimi-k2.7-code` and `kimi-k2.6` discovered through `neutralbeats`
-will now show a 256K context window instead of the generic 128K.
+This means `kimi-k2.7-code` and `kimi-k2.6` will show a 256K context window
+instead of the generic 128K, whether you define them yourself or rely on the
+built-in heuristics.
 
 ## Testing
 
@@ -189,11 +210,11 @@ You can verify discovery with a temporary provider:
 ```json
 {
   "provider": {
-    "neutralbeats-test": {
+    "my-provider-test": {
       "npm": "@ai-sdk/openai-compatible",
-      "name": "NeutralBeats Test",
+      "name": "My Provider Test",
       "options": {
-        "baseURL": "https://api.neutralbeats.com/v1",
+        "baseURL": "https://api.example.com/v1",
         "apiKey": "YOUR_API_KEY"
       }
     }
@@ -204,13 +225,13 @@ You can verify discovery with a temporary provider:
 Then run:
 
 ```bash
-opencode models neutralbeats-test --print-logs
+opencode models my-provider-test --print-logs
 ```
 
 You should see a log line like:
 
 ```
-Discovered 11 model(s) for neutralbeats-test
+Discovered 11 model(s) for my-provider-test
 ```
 
 ## License
