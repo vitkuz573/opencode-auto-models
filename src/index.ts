@@ -15,10 +15,36 @@ import type { Config, Plugin } from "@opencode-ai/plugin";
 const DEFAULT_TIMEOUT_MS = 5000;
 const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1000;
 
-const cache = new Map<
-  string,
-  { models: NonNullable<Config["provider"]>["string"]["models"]; fetchedAt: number }
->();
+const cache = new Map<string, { models: ModelMap; fetchedAt: number }>();
+
+type ModelLimits = {
+  context: number;
+  output: number;
+};
+
+type ModelMap = Record<string, any>;
+
+const DEFAULT_LIMITS: ModelLimits = {
+  context: 128000,
+  output: 16384,
+};
+
+// Provider-agnostic heuristics based on known upstream model families.
+// The first matching pattern wins.
+const MODEL_LIMIT_HEURISTICS: Array<{ pattern: RegExp; limits: ModelLimits }> = [
+  { pattern: /kimi-k2\.7/i, limits: { context: 262144, output: 32768 } },
+  { pattern: /kimi-k2\.6/i, limits: { context: 262144, output: 32768 } },
+  { pattern: /kimi-k2\.5/i, limits: { context: 262144, output: 32768 } },
+];
+
+function inferModelLimits(modelId: string, defaults: ModelLimits): ModelLimits {
+  for (const rule of MODEL_LIMIT_HEURISTICS) {
+    if (rule.pattern.test(modelId)) {
+      return rule.limits;
+    }
+  }
+  return defaults;
+}
 
 function fetchWithTimeout(
   url: string,
@@ -74,6 +100,21 @@ export const AutoModelsPlugin: Plugin = async ({ client }, options) => {
           continue;
         }
 
+        const providerDefaultLimits: ModelLimits = {
+          context:
+            typeof opts.autoModelsContext === "number"
+              ? opts.autoModelsContext
+              : typeof options?.defaultContext === "number"
+              ? options.defaultContext
+              : DEFAULT_LIMITS.context,
+          output:
+            typeof opts.autoModelsOutput === "number"
+              ? opts.autoModelsOutput
+              : typeof options?.defaultOutput === "number"
+              ? options.defaultOutput
+              : DEFAULT_LIMITS.output,
+        };
+
         if (dryRun) {
           await client.app.log({
             body: {
@@ -87,12 +128,11 @@ export const AutoModelsPlugin: Plugin = async ({ client }, options) => {
 
         // Check in-memory cache so we don't hit the API on every config reload.
         const cached = cache.get(providerId);
-        let discovered: NonNullable<Config["provider"]>["string"]["models"];
+        let discovered: ModelMap = {};
 
         if (cached && Date.now() - cached.fetchedAt < cacheTtlMs) {
           discovered = cached.models;
         } else {
-          discovered = {};
 
           try {
             const url = new URL(
@@ -127,11 +167,7 @@ export const AutoModelsPlugin: Plugin = async ({ client }, options) => {
               if (!id) continue;
               discovered[id] = {
                 name: model.name || id,
-                // Generous defaults: OpenCode will clamp/negotiate real limits per request.
-                limit: {
-                  context: 128000,
-                  output: 16384,
-                },
+                limit: inferModelLimits(id, providerDefaultLimits),
               };
             }
 
@@ -171,16 +207,14 @@ export const AutoModelsPlugin: Plugin = async ({ client }, options) => {
         if (Object.keys(discovered).length === 0) continue;
 
         // Merge discovered models with any manual overrides. Manual entries win.
-        const merged: NonNullable<Config["provider"]>["string"]["models"] = {
-          ...discovered,
-        };
+        const merged: ModelMap = { ...discovered };
         if (existingModels) {
-          for (const [id, manual] of Object.entries(existingModels)) {
+          for (const [id, manual] of Object.entries(existingModels as ModelMap)) {
             merged[id] = { ...discovered[id], ...manual };
           }
         }
 
-        provider.models = merged;
+        provider.models = merged as NonNullable<Config["provider"]>["string"]["models"];
       }
     },
   };

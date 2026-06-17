@@ -38,6 +38,7 @@
   "devDependencies": {
     "@opencode-ai/plugin": "file:/usr/local/lib/opencode/node_modules/@opencode-ai/plugin",
     "@opencode-ai/sdk": "file:/usr/local/lib/opencode/node_modules/@opencode-ai/sdk",
+    "bun-types": "^1.3.14",
     "typescript": "^5.0.0"
   }
 }

@@ -118,6 +118,8 @@ Set these inside `provider.options`:
 | `autoModels` | `true` for `@ai-sdk/openai-compatible`, otherwise `false` | Whether to auto-discover models for this provider. Use `false` to disable. |
 | `baseURL` | — | The OpenAI-compatible API base URL (must end with `/v1`). |
 | `apiKey` | — | API key used for the `Authorization: Bearer` header. |
+| `autoModelsContext` | `128000` | Default context limit for every auto-discovered model of this provider. |
+| `autoModelsOutput` | `16384` | Default output limit for every auto-discovered model of this provider. |
 
 ## Plugin options
 
@@ -139,6 +141,8 @@ If you load the plugin via the `plugin` array, you can pass options:
 | `timeout` | `5000` | Request timeout in milliseconds for `GET /models`. |
 | `cacheTtl` | `300000` | How long to keep discovered models in memory, in milliseconds. |
 | `dryRun` | `false` | If `true`, log what would be fetched without mutating the config. |
+| `defaultContext` | `128000` | Fallback context limit for auto-discovered models when no heuristic matches. |
+| `defaultOutput` | `16384` | Fallback output limit for auto-discovered models when no heuristic matches. |
 
 ## How it works
 
@@ -154,6 +158,29 @@ the plugin sends an authenticated `GET {baseURL}/models` request and translates
 
 If the request fails, the provider is left unchanged and the error is logged via
 `client.app.log`.
+
+## Model context limits
+
+Most OpenAI-compatible `/models` endpoints do not return context or output
+limits, so the plugin applies defaults and a small provider-agnostic heuristic
+table for well-known model families:
+
+| Model family | Context | Output |
+|--------------|---------|--------|
+| `kimi-k2.7*` | 262,144 | 32,768 |
+| `kimi-k2.6*` | 262,144 | 32,768 |
+| `kimi-k2.5*` | 262,144 | 32,768 |
+
+The priority order is:
+
+1. Manual `limit` in `provider.models` (highest priority).
+2. Provider-level `autoModelsContext` / `autoModelsOutput`.
+3. Built-in heuristic for the model ID.
+4. Plugin-level `defaultContext` / `defaultOutput`.
+5. Hardcoded fallback of `128000` / `16384`.
+
+This means `kimi-k2.7-code` and `kimi-k2.6` discovered through `neutralbeats`
+will now show a 256K context window instead of the generic 128K.
 
 ## Testing
 
