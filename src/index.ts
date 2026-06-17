@@ -140,7 +140,7 @@ export const AutoModelsPlugin: Plugin = async ({ client }, options) => {
 
         const externalRules = [
           ...compileLimitRules(opts.modelLimits as ModelLimitRuleInput[] | undefined),
-          ...compileLimitRules((options as { modelLimits?: ModelLimitRuleInput[] }).modelLimits),
+          ...compileLimitRules(options && (options as { modelLimits?: ModelLimitRuleInput[] }).modelLimits),
         ];
         const limitRules = [...externalRules, ...BUILT_IN_LIMIT_RULES];
 
